@@ -215,18 +215,7 @@ plan.md                 API contract and remaining work
 
 ---
 
-## A note on how this was built
 
-The backend implementation was written by [Claude Code](https://claude.com/claude-code)
-from a specification and prompt plan I wrote. I set the scoring model, the API
-contract, the screen flow and the build order; Claude Code wrote the code
-against them, and the engine was tuned empirically against recorded takes —
-several of the decisions documented above came out of measuring what actually
-separated a good performance from a bad one, rather than from the original
-design.
-
-The frontend was implemented with OpenAI Codex from the updated three-screen
-brief and the shared API contract.
 
 ### Local browser and phone connections
 
