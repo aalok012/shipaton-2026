@@ -1,4 +1,4 @@
-# Unison
+# Musically
 
 A party game about singing from memory.
 
