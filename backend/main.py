@@ -13,6 +13,7 @@ import asyncio
 import logging
 import tempfile
 import contextlib
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -34,7 +35,26 @@ SONGS_FILE = "songs.json"
 SCORE_TIMEOUT_SEC = 30
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
-app = FastAPI(title="Unison API")
+def _warm_pyin():
+    """First pyin call in a process pays ~2.5s of numba JIT. Spend it at boot
+    so the first real upload doesn't."""
+    t = time.time()
+    import librosa
+    y = np.sin(2 * np.pi * 440 * np.arange(SR) / SR).astype(np.float32)
+    librosa.pyin(y, fmin=librosa.note_to_hz("C2"),
+                 fmax=librosa.note_to_hz("C7"), sr=SR, hop_length=512)
+    log.info("pyin warmed in %.2fs", time.time() - t)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _load_songs()
+    asyncio.get_running_loop().run_in_executor(_pool, _warm_pyin)
+    yield
+    _pool.shutdown(wait=False)
+
+
+app = FastAPI(title="Unison API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -91,21 +111,6 @@ async def _validation(request: Request, exc: RequestValidationError):
 async def _unhandled(request: Request, exc: Exception):
     log.exception("unhandled error on %s", request.url.path)
     return _err(500, "Something went wrong scoring that take. Try again.")
-
-
-@app.on_event("startup")
-async def _startup():
-    _load_songs()
-    # First pyin call in a process pays ~2.5s of numba JIT. Spend it now so the
-    # first real upload doesn't.
-    def warm():
-        t = time.time()
-        import librosa
-        y = np.sin(2 * np.pi * 440 * np.arange(SR) / SR).astype(np.float32)
-        librosa.pyin(y, fmin=librosa.note_to_hz("C2"),
-                     fmax=librosa.note_to_hz("C7"), sr=SR, hop_length=512)
-        log.info("pyin warmed in %.2fs", time.time() - t)
-    asyncio.get_event_loop().run_in_executor(_pool, warm)
 
 
 @app.get("/health")

@@ -21,4 +21,5 @@ if [ ! -f songs.json ]; then
   echo
 fi
 
-exec .venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+# Use "python -m" so a renamed project folder cannot break the shebang
+exec .venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000

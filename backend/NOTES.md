@@ -27,3 +27,18 @@ Measured: transcode 0.058s; pitch read back correctly (440.0 Hz test tone).
 - Warm: 3s audio 0.14s | 10s 0.37s | 15s 0.49s
 
 Warm pyin once at FastAPI startup so the first real request doesn't pay the 2.5s.
+
+## Tests
+    .venv/bin/python -m pytest test_api.py -q     # 15 API tests, ~4s
+    .venv/bin/python test_scoring.py              # scoring check on real wavs
+
+pytest and httpx are dev-only and deliberately kept out of requirements.txt:
+
+    .venv/bin/pip install pytest httpx
+
+## If you rename the project folder
+A venv hardcodes an absolute path into the shebang of every script in
+`.venv/bin/`, so renaming the folder breaks `pip`, `uvicorn` and friends with
+"bad interpreter" while `.venv/bin/python` keeps working. Either recreate the
+venv or rewrite the shebangs. `start.sh` now launches via
+`.venv/bin/python -m uvicorn`, which is immune to this.
