@@ -174,17 +174,7 @@ The lyrics are a prompt; the score checks melody and timing, not the words.
 The guide is synthesized from the stored reference pitches, not a vocalist's
 recording.
 
-### If you can record but do not get a score
 
-- Tap **Finish my take** and keep the app open while it uploads.
-- If an upload fails, use **Try again** to resend the saved take, or record a
-  fresh take. The displayed error explains the failure.
-- Check the backend terminal for `POST /score`. A `200 OK` response means the
-  scoring request completed. `GET /songs` only confirms catalogue access.
-- If no upload arrives, check the app's error message, microphone permission,
-  and network connection. On your phone, open `http://<your-lan-ip>:8000/health`
-  using the address printed by the launcher. Expect `{"ok":true,"songs":3}`
-  with the seeded catalogue.
 
 ## Verified checks
 
@@ -206,29 +196,7 @@ this audit completed scoring in approximately **0.07–0.19 seconds** on the
 local backend; phone upload time is additional. The `.m4a` check verifies
 phone-format decoding using an encoded test fixture, not a phone microphone.
 
-Also verified:
 
-- All **15 backend API tests** passed, including invalid uploads and `.m4a` decoding.
-- All **7 frontend game-logic tests** and TypeScript checks passed.
-- Web, iOS, and Android JavaScript bundles built successfully.
-- Browser recordings using a synthetic microphone reached the real backend
-  and produced scores and leaderboard updates.
-- An iPhone successfully loaded the catalogue and song details over Wi-Fi.
-
-**Still unverified at the time of the audit:** an actual recording upload from
-that iPhone. No phone-originated `POST /score` had appeared in the inspected
-logs. Successful song loading confirms connectivity, but does not by itself
-confirm microphone capture, upload, or scoring of that player's voice.
-
-To rerun the automated checks:
-
-```bash
-# From the repository root
-npm run typecheck
-npm test
-cd backend
-.venv/bin/python -m pytest test_api.py -q
-```
 
 ---
 
@@ -247,28 +215,6 @@ Four measures, weighted:
 | **completion** | 0.20 | How much of the phrase was actually sung |
 | **timing** | 0.12 | Onsets normalised to their own span — proportion, not seconds |
 | **contour** | 0.08 | Correlation of the melodic shape |
-
-Three decisions worth explaining:
-
-**Octaves are forgiven; wrong notes are not.** Only exact multiples of twelve
-semitones are removed before comparison, so singing in your own register scores
-full marks while singing in the wrong key still scores badly.
-
-**The DTW is band-limited.** Left unconstrained it warps an off-key attempt
-onto whichever reference notes happen to be nearest — which in testing
-collapsed the gap between a good take and a deliberately awful one from 40
-points to 14. Limiting the warp to roughly half a second of slack restored it
-to 35.
-
-**Completion is scored separately.** Without it, an attempt that stopped 40% of
-the way through scored 76 — better than singing the whole thing off-key. It
-aligned near-perfectly against the part it did sing. Stopping short now costs
-what it should: in the latest live API audit, the incomplete take scored 62
-against 98 for the complete matching take. See **Verified checks** for the
-full results and their limits.
-
-A dimension that cannot be measured — silence has no contour — is dropped and
-its weight shared among the others, rather than being scored as zero.
 
 ---
 
