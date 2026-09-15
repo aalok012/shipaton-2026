@@ -60,6 +60,10 @@ MIN_VOICED_FRAMES = 8
 # nothing beyond twice it.
 ONSET_TOLERANCE = 0.05
 
+# Onsets read from the audio are far sharper than ones inferred from the pitch
+# track, so they are used whenever the song has them stored.
+USE_AUDIO_ONSETS = True
+
 # Two onsets closer together than this are the same note; a little pitch
 # wobble on the way into a note would otherwise register twice.
 MIN_ONSET_GAP_SEC = 0.08
@@ -190,6 +194,14 @@ def _octave_shift(att, ref):
     return 12.0 * round(float(np.median(att) - np.median(ref)) / 12.0)
 
 
+def _audio_onsets(y):
+    """Note starts read from the signal itself."""
+    env = librosa.onset.onset_strength(y=y, sr=SR, hop_length=HOP)
+    return librosa.onset.onset_detect(
+        onset_envelope=env, sr=SR, hop_length=HOP, units="time", backtrack=False
+    ).astype(float)
+
+
 def _note_onsets(midi):
     """Onset time of each note, derived from the pitch track.
 
@@ -299,7 +311,13 @@ def build_reference(wav_path):
     return [None if not np.isfinite(v) else round(float(v), 3) for v in midi]
 
 
-def score_recording(audio_path, reference_midi):
+def build_reference_onsets(wav_path):
+    """Note-start times for a song, stored alongside its melody so scoring
+    never needs the reference audio again."""
+    return [round(float(t), 4) for t in _audio_onsets(_load_audio(wav_path))]
+
+
+def score_recording(audio_path, reference_midi, reference_onsets=None):
     """Score one sung attempt against a stored reference melody."""
     if reference_midi is None or len(reference_midi) == 0:
         raise ScoringError("song has no reference melody")
@@ -336,9 +354,18 @@ def score_recording(audio_path, reference_midi):
     ref_pairs, att_pairs = _align(ref_voiced, att_voiced)
 
     frame_sec = HOP / SR
+    # Both sides must be measured the same way, so audio onsets are only used
+    # when the song has them stored; otherwise both fall back to the pitch track.
+    if USE_AUDIO_ONSETS and reference_onsets:
+        ref_on = np.asarray(reference_onsets, dtype=float)
+        att_on = _audio_onsets(y)
+    else:
+        ref_on = _note_onsets(ref_frames)
+        att_on = _note_onsets(att_frames)
+
     parts = {
         "pitch": _pitch_score(ref_pairs, att_pairs),
-        "timing": _rhythm_score(_note_onsets(ref_frames), _note_onsets(att_frames)),
+        "timing": _rhythm_score(ref_on, att_on),
         "contour": _contour_score(ref_pairs, att_pairs),
         "completion": _completion_score(
             ref_voiced.size * frame_sec, att_voiced.size * frame_sec

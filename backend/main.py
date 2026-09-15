@@ -87,7 +87,8 @@ def _find(song_id):
 
 
 def _summary(song):
-    return {k: v for k, v in song.items() if k not in ("reference_midi", "source_file")}
+    heavy = ("reference_midi", "reference_onsets", "source_file")
+    return {k: v for k, v in song.items() if k not in heavy}
 
 
 def _err(status, message, **extra):
@@ -165,7 +166,8 @@ async def score(audio: UploadFile = File(...), song_id: str = Form(...)):
         try:
             result = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
-                    _pool, score_recording, tmp, reference_midi
+                    _pool, score_recording, tmp, reference_midi,
+                    song.get("reference_onsets"),
                 ),
                 timeout=SCORE_TIMEOUT_SEC,
             )

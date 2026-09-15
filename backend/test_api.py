@@ -21,11 +21,13 @@ from fastapi.testclient import TestClient
 import main
 
 SR = 22050
-SONG_ID = "test-song"
+SONG_ID = "paper-lanterns"
 
-# Same phrase prep used to build the placeholder songs.json.
-MEL = [(67, .45), (67, .45), (69, .5), (67, .5), (72, .5), (71, .9),
-       (67, .45), (67, .45), (69, .5), (67, .5), (74, .5), (72, .9)]
+# The demo song's phrase, in seconds, matching seed_demo_songs.py.
+_BEAT = 60.0 / 96
+MEL = [(m, b * _BEAT) for m, b in
+       [(67, .5), (67, .5), (69, .5), (67, .5), (72, .5), (71, 1.0),
+        (67, .5), (67, .5), (69, .5), (67, .5), (74, .5), (72, 1.0)]]
 
 
 def _tone(midi, dur):
@@ -45,7 +47,7 @@ def _render(mel, pitch_err, timing_jit, seed):
     for m, d in mel:
         dd = max(0.12, d * (1 + r.normal(0, timing_jit)))
         out.append(_tone(m + r.normal(0, pitch_err), dd))
-        out.append(np.zeros(int(SR * max(0.04, 0.09 * (1 + r.normal(0, timing_jit)))),
+        out.append(np.zeros(int(SR * max(0.04, 0.08 * (1 + r.normal(0, timing_jit)))),
                            dtype=np.float32))
     return np.concatenate(out)
 
@@ -64,13 +66,13 @@ def client():
 
 @pytest.fixture(scope="session")
 def placeholder_song():
-    """The score assertions only hold for the synthetic placeholder."""
+    """Score assertions need the demo catalogue from seed_demo_songs.py."""
     if not os.path.exists("songs.json"):
         pytest.skip("no songs.json")
     songs = json.load(open("songs.json"))
     song = next((s for s in songs if s["id"] == SONG_ID), None)
     if song is None:
-        pytest.skip("placeholder song replaced by real data")
+        pytest.skip(f"song {SONG_ID} not in songs.json")
     return song
 
 

@@ -17,7 +17,7 @@ Two people build in parallel from a shared API contract:
 | Scoring engine | Done, verified — good take 98 vs bad take 58 |
 | `/health` `/songs` `/songs/{id}` `/score` | Done, all edge cases return clean JSON |
 | m4a upload path | Done, verified end to end |
-| Real song data | **Placeholder only** — one synthetic song in `songs.json` |
+| Demo song data | 3 seeded songs, playable now (`seed_demo_songs.py`) |
 | Expo app | Not started |
 | README | Not written (joint task, last 20 min) |
 | Git | Repo initialized, one local commit, **not pushed** |
@@ -27,8 +27,10 @@ Two people build in parallel from a shared API contract:
 1. **`unison-build-spec.md` is missing.** Person B needs it for the 8 screen
    names (section 3) and the exact palette hexes and motion moments
    (section 4). Nothing in this plan invents those values.
-2. **No real songs.** `songs.json` holds one synthetic test tone so the app has
-   something to render. Delete it before running `prep_songs.py` for real.
+2. **Songs are demo data, by choice.** `seed_demo_songs.py` synthesises three
+   songs with invented titles and lyrics, run through the same analysis path
+   real audio takes. Swap in real recordings later with `prep_songs.py`;
+   nothing else has to change.
 3. **`scoring.py` was written from the prompt doc**, not supplied. If the
    original exists, dropping it in replaces that one file; the interface
    (`build_reference`, `score_recording`) is unchanged.
@@ -64,6 +66,8 @@ The guess round shows `title` plus the three `decoys`, shuffled.
 ### `GET /songs/{id}`
 Same object plus `reference_midi` — a flat array of MIDI numbers, one per
 analysis frame, `null` where nothing was sung. This drives the pitch ribbon.
+Also `reference_onsets`, the note-start times in seconds, which the app can
+ignore; scoring uses it to judge rhythm.
 
 Frames are **512 samples at 22050 Hz ≈ 23.2 ms apart**. Frame `i` sits at
 `i * 512 / 22050` seconds. MIDI 60 is middle C; each whole number is a semitone.
@@ -72,17 +76,29 @@ Frames are **512 samples at 22050 Hz ≈ 23.2 ms apart**. Frame `i` sits at
 Multipart: `audio` (the recording) + `song_id` (string).
 ```json
 {
-  "score": 98,
-  "pitch_accuracy": 98.3,
-  "timing_accuracy": 98.8,
-  "contour_match": 97.3,
-  "duration_sec": 7.86,
-  "voiced_ratio": 0.968,
+  "score": 97,
+  "pitch_accuracy": 100.0,
+  "timing_accuracy": 76.1,
+  "contour_match": 99.8,
+  "completion": 98.7,
+  "duration_sec": 5.4,
+  "voiced_ratio": 0.93,
+  "confidence": { "pitch": "ok", "timing": "ok",
+                  "contour": "ok", "completion": "ok" },
   "elapsed_sec": 0.18
 }
 ```
-`score` is the headline 0–100 number. The next three are the breakdown bars on
-the Score screen, each 0–100.
+`score` is the headline 0–100 number. The four accuracy values are each 0–100;
+the Score screen shows **pitch, timing and contour** as its three bars.
+
+`completion` is how much of the phrase was actually sung. It exists because
+without it a player could sing three seconds of a ten-second song and still
+score in the 90s — the attempt aligns almost perfectly against the part it did
+sing. Worth surfacing in the UI when it is low, or a short take looks like an
+unexplained bad score.
+
+`confidence` marks any dimension that could not be measured (`"unavailable"`,
+`"low_voiced_audio"`). Its weight is redistributed rather than scored as zero.
 
 **Silence or speech returns 200, not an error** — score 0 plus a `message`
 field ("No singing detected."). Show that message instead of a bare zero.
@@ -114,27 +130,38 @@ The app can always do `if (json.error) showToast(json.error)`.
 | `prep_songs.py` | Builds `songs.json` from `./references/`, resumable |
 | `main.py` | The service |
 | `test_scoring.py` | A1 harness — prints the dict and the good/bad gap |
+| `test_api.py` | 15 API tests, ~3s |
+| `seed_demo_songs.py` | Builds a playable songs.json with no recordings |
 | `start.sh` | Runs on `0.0.0.0:8000`, prints the LAN IP |
 | `NOTES.md` | Environment gotchas, measured timings |
 
 ### How scoring works
-`pyin` extracts a pitch per frame, converted to MIDI. The attempt is stretched
-to the reference length, then measured three ways:
+`pyin` extracts a pitch per frame, converted to MIDI. The attempt is
+**DTW-aligned** to the reference rather than stretched linearly, so dragging a
+note and catching up is not punished as a pitch error. Then four measures:
 
-- **pitch** (weight 0.55) — fraction of frames within `SEMITONE_TOLERANCE`
-  (1.5), tapering to zero one tolerance beyond.
-- **timing** (0.20) — overlap of the sung/silent pattern, as
-  intersection-over-union.
-- **contour** (0.25) — correlation of the melodic shape: does it rise and fall
-  with the reference?
+- **pitch** (weight 0.60) — per-frame credit, full inside
+  `SEMITONE_TOLERANCE` (1.0) and fading to zero one tolerance beyond.
+- **timing** (0.12) — onsets normalised to their own span, so rhythm is judged
+  as proportion, not absolute seconds. A late start costs nothing; rushing does.
+- **contour** (0.08) — correlation of the melodic shape. Small weight, because
+  once contours are DTW-aligned it largely restates pitch.
+- **completion** (0.20) — how much of the phrase was sung. Stopping short is
+  charged in proportion; overrunning is treated far more leniently.
 
-Two deliberate decisions:
+Three deliberate decisions:
 
 - **Octaves are forgiven, wrong notes are not.** Only exact multiples of 12
   semitones are removed, so singing in your own range scores full marks while
   off-key singing still scores badly.
-- **Timing rewards rhythm, not pitch.** The off-key test take scored 95.8 on
-  timing — right rhythm, wrong notes. Pitch and contour carry the real signal.
+- **DTW is band-limited** (`DTW_BAND_RAD = 0.06`, roughly half a second of
+  slack). Unconstrained DTW warps an off-key attempt onto whichever reference
+  notes are nearest, which collapsed the good-vs-bad gap from 40 points to 14.
+- **A metric that cannot be measured is dropped**, not scored zero, and its
+  weight is shared among the rest.
+
+Measured on synthetic takes: good **97**, off-key **62** (gap 35), a take that
+stops 40% in **61**, silence **0**.
 
 ### Measured performance
 Scoring runs in **0.15–0.18s**, far inside the 30s timeout. The first `pyin`
@@ -150,8 +177,11 @@ user request pays it.
   to audio loading should re-test an m4a.
 
 ### Remaining work
-1. Record real reference audio into `backend/references/`.
-2. Delete the placeholder `songs.json`, run `prep_songs.py`, answer the prompts.
+Nothing blocking for a demo — the catalogue is seeded and the API is live.
+
+To move to real songs later:
+1. Record reference audio into `backend/references/`.
+2. Delete `songs.json`, run `prep_songs.py`, answer the prompts.
 3. Re-run `test_scoring.py` with a real voice and confirm good/bad still
    separate by 30+. Tune `SEMITONE_TOLERANCE` / `WEIGHTS` if not.
 

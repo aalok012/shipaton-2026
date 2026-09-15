@@ -12,7 +12,7 @@ import json
 import sys
 import time
 
-from scoring import build_reference, SR, ScoringError
+from scoring import build_reference, build_reference_onsets, SR, ScoringError
 import librosa
 
 REF_DIR = "references"
@@ -83,6 +83,7 @@ def main():
         t = time.time()
         try:
             reference_midi = build_reference(path)
+            reference_onsets = build_reference_onsets(path)
         except ScoringError as e:
             print(f"\n  SKIPPED - {e}")
             continue
@@ -107,6 +108,7 @@ def main():
             "lyrics": [line1, line2],
             "duration_sec": round(dur, 2) if dur else round(len(reference_midi) * 512 / SR, 2),
             "reference_midi": reference_midi,
+            "reference_onsets": reference_onsets,
             "decoys": decoys,
             "source_file": name,
         })
