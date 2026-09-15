@@ -6,9 +6,8 @@ add names, listen to a melody guide, and sing two lyric lines. Each take earns
 Everyone sings the same song in a round. The app checks melody and timing,
 not the actual lyric words.
 
-The interesting part is that the scoring is real. It is not a random number
-dressed up with an animation: pitch is extracted from the recording frame by
-frame, aligned against the reference melody, and measured.
+Scoring extracts pitch from the uploaded recording frame by frame, aligns it
+against the selected song's reference melody, and measures the difference.
 
 ---
 
@@ -16,10 +15,10 @@ frame, aligned against the reference melody, and measured.
 
 | | |
 |---|---|
-| Scoring engine | Working, 15 tests |
+| Scoring engine | Live API pitch comparison verified; 15 backend tests pass |
 | HTTP API | Working — 4 endpoints |
 | Song catalogue | 3 demo songs, playable now |
-| Mobile app | Three screens implemented; physical-device testing pending |
+| Mobile app | Four screens implemented; iPhone song loading confirmed; phone recording upload still unverified |
 
 The backend is complete and runs standalone. You can score a recording with
 nothing but `curl`. The Expo client lives in `app/`; see the [mobile setup guide](app/README.md).
@@ -50,11 +49,11 @@ curl -F "audio=@take.m4a" -F "song_id=paper-lanterns" \
 
 ```json
 {
-  "score": 97,
-  "pitch_accuracy": 100.0,
-  "timing_accuracy": 76.1,
-  "contour_match": 99.8,
-  "completion": 98.7
+  "score": 98,
+  "pitch_accuracy": 99.7,
+  "timing_accuracy": 85.6,
+  "contour_match": 99.1,
+  "completion": 100.0
 }
 ```
 
@@ -98,6 +97,19 @@ If you have several network adapters, select the Wi-Fi address explicitly with
 `MUSIC_HOST=<your-lan-ip> npm start`. For browser development, use
 `npm start -- --web` (microphone access requires localhost or HTTPS).
 
+### Local browser and phone connections
+
+The combined launcher sets `EXPO_PUBLIC_API_URL` to the laptop's LAN address
+for Expo Go and `EXPO_PUBLIC_WEB_API_URL` to localhost for desktop browser
+use. Start both services with `npm start`; press `w` for the browser. These
+addresses are passed at launch, so no LAN address is committed.
+
+If songs load in the browser but not on the phone, check that both devices are
+on the same Wi-Fi and that your operating system permits local-network access
+for the terminal/Node/Python processes. The backend must listen on `0.0.0.0`,
+which the combined launcher configures. A frontend tunnel alone does not
+expose the scoring API.
+
 ### Run the app separately
 
 Requires Node.js 22.13+ and Expo Go compatible with SDK 57.
@@ -112,15 +124,111 @@ Set `EXPO_PUBLIC_API_URL` in `.env` to the LAN address printed by
 `backend/start.sh`, then run `npx expo start` and scan the QR code. Keep the
 backend running and both devices on the same Wi-Fi.
 
-The three screens are **Home → Sing → Results**. Solo and 2–6 player games
+The four screens are **Home → Sing → Results → Leaderboard**. Solo and 2–6 player games
 support fresh songs each round, microphone recording, upload retry, score
 animations, and cumulative rankings. The demo catalogue allows up to three
 rounds. More rounds unlock as you add songs.
 
 See [app/README.md](app/README.md) for controls, architecture, checks, and
-physical-device verification. TypeScript checks, four game-logic tests, web/
+physical-device verification. TypeScript checks, seven game-logic tests, web/
 iOS/Android bundles, and real-backend browser recording checks pass. Native
 microphone and audio routing still need a real phone test.
+
+---
+
+## Party night with friends
+
+Play together on one shared phone. Party mode supports 2–6 friends; solo mode
+is still available for practice.
+
+- **Pass-the-phone handoffs:** each singer confirms they have the phone before
+  seeing their song. The lineup shows who has sung and who is next.
+- **A score to chase:** later singers see the score needed to take the round
+  lead. If someone scores 100, the challenge is to tie them.
+- **Round atmosphere:** warm-up, friendly-rivalry, and encore prompts give the
+  audience introductions, stage poses, and applause to join in with. These
+  are optional social prompts and do not change the scoring rules.
+- **Winner reveals and reactions:** see round leaders and final champions,
+  including ties, and tap applause, fire, or star reactions. Reactions are
+  local visual feedback, not per-person votes or bonus points.
+- **Rematch with this crew:** retain player names and the session's selected
+  songs, reset all scores, shuffle song order, and rotate the opening singer.
+  Choose **Start with a new group** to return to setup instead.
+
+The flow uses four screens: Home, Sing (including its handoff state),
+Results, and Leaderboard. There are no online rooms or separate-device multiplayer yet.
+
+## Recording and scoring on your phone
+
+1. Open the app in Expo Go on the same Wi-Fi as your laptop.
+2. Choose players and rounds, then tap **Let's play**.
+3. Tap **Hear the melody** to learn the selected demo song's instrumental guide.
+4. Tap **Take the mic**, allow microphone access, and wait for the countdown.
+5. Sing both lyric lines, then tap **Finish my take**. Takes also stop at 30 seconds.
+6. The app uploads the recording and selected `song_id` to `POST /score`, then
+   shows the score, pitch/timing/contour breakdown, and cumulative leaderboard.
+
+The microphone meter shows **volume during recording**. It does not display
+live pitch accuracy. Pitch comparison happens on the backend **after upload**.
+The lyrics are a prompt; the score checks melody and timing, not the words.
+The guide is synthesized from the stored reference pitches, not a vocalist's
+recording.
+
+### If you can record but do not get a score
+
+- Tap **Finish my take** and keep the app open while it uploads.
+- If an upload fails, use **Try again** to resend the saved take, or record a
+  fresh take. The displayed error explains the failure.
+- Check the backend terminal for `POST /score`. A `200 OK` response means the
+  scoring request completed. `GET /songs` only confirms catalogue access.
+- If no upload arrives, check the app's error message, microphone permission,
+  and network connection. On your phone, open `http://<your-lan-ip>:8000/health`
+  using the address printed by the launcher. Expect `{"ok":true,"songs":3}`
+  with the seeded catalogue.
+
+## Verified checks
+
+The live API audit on **September 14, 2026** used controlled synthetic recordings
+against **Paper Lanterns** from the demo catalogue:
+
+| Recording | Score / 100 | Pitch accuracy |
+|---|---:|---:|
+| Matching melody | **98** | 99.7% |
+| Off-key melody | **61** | 42.8% |
+| Silence | **0** | Not measurable |
+| Incomplete phrase (about 40%) | **62** | 73.1% |
+| Matching melody one octave higher | **97** | 100.0% |
+| Matching melody encoded as `.m4a` | **98** | 99.7% |
+
+The matching/off-key score gap was **37 points**. These are measured fixture
+results, not promised scores for human performances. Non-silent requests in
+this audit completed scoring in approximately **0.07–0.19 seconds** on the
+local backend; phone upload time is additional. The `.m4a` check verifies
+phone-format decoding using an encoded test fixture, not a phone microphone.
+
+Also verified:
+
+- All **15 backend API tests** passed, including invalid uploads and `.m4a` decoding.
+- All **7 frontend game-logic tests** and TypeScript checks passed.
+- Web, iOS, and Android JavaScript bundles built successfully.
+- Browser recordings using a synthetic microphone reached the real backend
+  and produced scores and leaderboard updates.
+- An iPhone successfully loaded the catalogue and song details over Wi-Fi.
+
+**Still unverified at the time of the audit:** an actual recording upload from
+that iPhone. No phone-originated `POST /score` had appeared in the inspected
+logs. Successful song loading confirms connectivity, but does not by itself
+confirm microphone capture, upload, or scoring of that player's voice.
+
+To rerun the automated checks:
+
+```bash
+# From the repository root
+npm run typecheck
+npm test
+cd backend
+.venv/bin/python -m pytest test_api.py -q
+```
 
 ---
 
@@ -155,11 +263,9 @@ to 35.
 **Completion is scored separately.** Without it, an attempt that stopped 40% of
 the way through scored 76 — better than singing the whole thing off-key. It
 aligned near-perfectly against the part it did sing. Stopping short now costs
-what it should: the same take scores 61 against 97 for a complete one.
-
-Measured on synthetic takes: a good take scores **97**, a deliberately off-key
-one **62**, a take that stops 40% in **61**, and silence **0**. Scoring takes
-roughly 0.2 seconds.
+what it should: in the latest live API audit, the incomplete take scored 62
+against 98 for the complete matching take. See **Verified checks** for the
+full results and their limits.
 
 A dimension that cannot be measured — silence has no contour — is dropped and
 its weight shared among the others, rather than being scored as zero.
@@ -176,8 +282,10 @@ its weight shared among the others, rather than being scored as zero.
 | `POST /score` | multipart `audio` + `song_id` → the score object above |
 
 Every failure returns the same shape, `{"error": "..."}`, so the client never
-parses a second error format. Silence and speech are not errors: they return a
-score of zero with a message, because "you didn't sing" is a result.
+parses a second error format. Audio with too few detectable pitched frames,
+including silence, returns HTTP 200 with a score of zero and the message
+`"No singing detected."`. This is a pitch detector, not a speech recognizer;
+pitched speech or humming can still produce a score.
 
 Uploads are capped at 25 MB and scoring at 30 seconds. `pyin` is warmed at
 startup so the first request does not pay the JIT cost.
@@ -196,7 +304,7 @@ startup so the first request does not pay the JIT cost.
 
 ```
 app/
-  App.tsx               three-screen navigation and session state
+  App.tsx               four-screen navigation and session state
   src/screens/          Home, Sing, Results
   src/components/       shared UI and music graphics
   src/lib/              API client, game logic, melody preview
@@ -210,22 +318,29 @@ backend/
   test_api.py           15 API tests
   test_scoring.py       score real takes and print the breakdown
   NOTES.md              environment gotchas worth knowing
-plan.md                 API contract and remaining work
+scripts/dev.mjs         combined backend/Expo launcher
+package.json            root startup and frontend check commands
+plan.md                 original build plan and API contract
 ```
 
 ---
 
 
 
-### Local browser and phone connections
+## Dedicated leaderboard
 
-The combined launcher sets `EXPO_PUBLIC_API_URL` to the laptop's LAN address
-for Expo Go and `EXPO_PUBLIC_WEB_API_URL` to localhost for desktop browser
-use. Start both services with `npm start`; press `w` for the browser. These
-addresses are passed at launch, so no LAN address is committed.
+After the last singer in each round, tap **See the round leaderboard** (or
+**Reveal the final leaderboard** at the end of the game). A separate page
+shows a top-three podium, shaded character portraits, wreath badges, diamond
+point icons, and a scrollable full ranking. The cream, purple, orange, and
+lime palette matches the game; translucent panels and soft gradients add depth.
 
-If songs load in the browser but not on the phone, check that both devices are
-on the same Wi-Fi and that your operating system permits local-network access
-for the terminal/Node/Python processes. The backend must listen on `0.0.0.0`,
-which the combined launcher configures. A frontend tunnel alone does not
-expose the scoring API.
+Rankings use actual cumulative scores. Ties share a rank, and solo/two-player
+games show only the players who exist. **Local** shows this shared-phone game.
+**Team** and **Global** are selectable information views; team scoring and
+online rankings are not implemented. Diamond icons represent score points,
+not an additional currency.
+
+Go back to review the last take, continue to the next round, or use rematch/
+new-group actions after the final round. Score-saving is not repeated when
+navigating between Results and Leaderboard.

@@ -27,6 +27,7 @@ import {
   Page,
   Type,
 } from "../components/ui";
+import { PartyHandoff } from "../components/PartyHandoff";
 import { PitchRibbon } from "../components/PitchRibbon";
 import { getSong, scoreRecording, errorMessage } from "../lib/api";
 import { melodyUri } from "../lib/melody";
@@ -48,6 +49,7 @@ export function SingScreen({
   onScored: (score: Score) => void;
   onExit: () => void;
 }) {
+  const [ready, setReady] = useState(game.players.length === 1);
   const summary = game.songs[game.round];
   const current = game.players[game.playerIndex];
   const [song, setSong] = useState<Song>();
@@ -135,6 +137,7 @@ export function SingScreen({
       else {
         try {
           recorder.record();
+          if (__DEV__) console.info("[microphone] start requested");
           phaseRef.current = "recording";
           setPhase("recording");
           locked.current = false;
@@ -150,6 +153,35 @@ export function SingScreen({
   useEffect(() => {
     if (phase === "recording" && seconds >= 30) void finish();
   }, [seconds, phase]);
+  useEffect(() => {
+    if (phase !== "recording") return;
+    const timer = setTimeout(() => {
+      const actual = recorder.getStatus();
+      if (__DEV__)
+        console.info("[microphone] capture check", {
+          recording: actual.isRecording,
+          durationMillis: actual.durationMillis,
+          metering: actual.metering,
+        });
+      if (!actual.isRecording || actual.durationMillis <= 0) {
+        phaseRef.current = "stopping";
+        setPhase("stopping");
+        void recorder
+          .stop()
+          .catch(() => {})
+          .finally(() => {
+            if (!alive.current) return;
+            locked.current = false;
+            setPhase("ready");
+            setError(
+              "The microphone did not start recording. Check Expo Go’s microphone permission, close other audio apps, and try again.",
+            );
+            setDenied(true);
+          });
+      }
+    }, 1800);
+    return () => clearTimeout(timer);
+  }, [phase, recorder]);
   // Restore the output audio session when the recorder hook releases on departure.
   useEffect(
     () => () => {
@@ -193,6 +225,7 @@ export function SingScreen({
     try {
       player.pause();
       const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (__DEV__) console.info("[microphone] permission", permission.status);
       if (!alive.current || token !== operation.current) return;
       if (!permission.granted) {
         setDenied(true);
@@ -206,6 +239,8 @@ export function SingScreen({
       });
       if (!alive.current || token !== operation.current) return;
       await recorder.prepareToRecordAsync();
+      if (__DEV__)
+        console.info("[microphone] prepared", recorder.getStatus().canRecord);
       if (!alive.current || token !== operation.current) {
         await recorder.stop().catch(() => {});
         return;
@@ -226,6 +261,11 @@ export function SingScreen({
     setError("");
     try {
       const result = await scoreRecording(uri, summary.id);
+      if (__DEV__)
+        console.info("[microphone] scored", {
+          score: result.score,
+          voicedRatio: result.voiced_ratio,
+        });
       if (alive.current) onScored(result);
     } catch (e) {
       if (alive.current) {
@@ -249,6 +289,10 @@ export function SingScreen({
           "The recording could not be saved. Please try another take.",
         );
       if (!alive.current) return;
+      if (__DEV__)
+        console.info("[microphone] take saved; uploading", {
+          durationSeconds: seconds,
+        });
       setSavedUri(uri);
       await setAudioModeAsync({ allowsRecording: false });
       await upload(uri);
@@ -262,12 +306,48 @@ export function SingScreen({
   }
   const busy = ["preparing", "stopping", "uploading"].includes(phase);
   const time = `0:${Math.floor(seconds).toString().padStart(2, "0")}`;
+  if (!ready)
+    return (
+      <PartyHandoff
+        game={game}
+        onReady={() => setReady(true)}
+        onExit={onExit}
+      />
+    );
   return (
     <Page
       step={1}
       onExit={onExit}
       footer={
         <>
+          {!!error && (
+            <ErrorCard
+              message={error}
+              onRetry={
+                !song
+                  ? loadSong
+                  : savedUri && phase === "ready"
+                    ? () => {
+                        if (!locked.current) {
+                          locked.current = true;
+                          void upload(savedUri);
+                        }
+                      }
+                    : undefined
+              }
+            />
+          )}
+          {denied && Platform.OS !== "web" && (
+            <Button
+              title="Open microphone settings"
+              secondary
+              icon="settings-outline"
+              onPress={() => {
+                void Linking.openSettings();
+              }}
+            />
+          )}
+
           <Button
             title={
               phase === "recording"
@@ -426,33 +506,6 @@ export function SingScreen({
           </Type>
         </View>
       </View>
-      {!!error && (
-        <ErrorCard
-          message={error}
-          onRetry={
-            !song
-              ? loadSong
-              : savedUri && phase === "ready"
-                ? () => {
-                    if (!locked.current) {
-                      locked.current = true;
-                      void upload(savedUri);
-                    }
-                  }
-                : undefined
-          }
-        />
-      )}
-      {denied && Platform.OS !== "web" && (
-        <Button
-          title="Open microphone settings"
-          secondary
-          icon="settings-outline"
-          onPress={() => {
-            void Linking.openSettings();
-          }}
-        />
-      )}
       <View style={s.tip}>
         <Ionicons name="bulb-outline" size={17} color={c.green} />
         <Type style={s.tipText}>

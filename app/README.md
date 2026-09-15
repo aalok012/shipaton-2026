@@ -54,11 +54,12 @@ python3.12 -m venv .venv
 
 The backend uses FastAPI, librosa, numpy, and ffmpeg. See [backend notes](../backend/NOTES.md) for the scoring environment.
 
-## Three screens
+## Four screens
 
 1. **Home:** solo or 2–6 players, editable names, 1/3/5/7 rounds, and Start. Choices beyond the current catalogue size are disabled; a two-song catalogue also offers two rounds. Blank and duplicate names are rejected.
 2. **Sing:** randomly selected song, lyrics, an instrumental melody preview, player handoff, microphone permission, 3–2–1 countdown, elapsed time, reference melody map, and live microphone level. Finish uploads the recording to `/score`. Takes stop at 30 seconds. Failed uploads can be retried without re-recording.
-3. **Results:** animated score ring, pitch/timing/contour bars, short-take feedback, cumulative leaderboard, next player/round, final winner (including ties), and Play again.
+3. **Results:** animated score ring, pitch/timing/contour bars, short-take feedback, reactions, and the next player or leaderboard action.
+4. **Leaderboard:** dedicated top-three podium and full ranking, round/final standings, Local/Team/Global tabs, and next-round, rematch, or new-group actions.
 
 Each player sings the **same song in a round**. Songs do not repeat within a game. Three seeded songs therefore support three full rounds for any number of players. State lives in memory and resets when the app closes or the game ends.
 
@@ -70,8 +71,8 @@ The selected catalogue contains invented demo songs. No AI song-generation servi
 
 ## Project map
 
-- `app/App.tsx` — typed navigation between exactly three screens, session state, exit confirmation.
-- `app/src/screens/` — Home, Sing, and Results.
+- `app/App.tsx` — typed navigation between four screens, session state, exit confirmation.
+- `app/src/screens/` — Home, Sing, Results, and Leaderboard.
 - `app/src/components/` — reusable controls, record-player artwork, reference melody map.
 - `app/src/theme.ts` — shared palette and typography.
 - `app/src/lib/api.ts` — environment-based API client, multipart upload, readable failures, timeout.
@@ -114,3 +115,33 @@ on the same Wi-Fi and that your operating system permits local-network access
 for the terminal/Node/Python processes. The backend must listen on `0.0.0.0`,
 which the combined launcher configures. A frontend tunnel alone does not
 expose the scoring API.
+
+## Party play
+
+Multiplayer now includes a named handoff before each turn, running order,
+round themes and audience prompts, a score-to-beat challenge, round/final
+winner reveals, and applause/fire/star reactions. Reactions do not alter
+scores. Rematch retains the group and selected songs, shuffles song order,
+resets scores, and rotates the opening singer; starting with a new group
+returns to Home. Solo skips the handoff. This remains shared-phone play.
+
+Seven game tests cover scoring/turns, round leaders and ties, round targets,
+and multiplayer/solo rematches.
+
+## Dedicated leaderboard
+
+After the last singer in each round, tap **See the round leaderboard** (or
+**Reveal the final leaderboard** at the end of the game). A separate page
+shows a top-three podium, shaded character portraits, wreath badges, diamond
+point icons, and a scrollable full ranking. The cream, purple, orange, and
+lime palette matches the game; translucent panels and soft gradients add depth.
+
+Rankings use actual cumulative scores. Ties share a rank, and solo/two-player
+games show only the players who exist. **Local** shows this shared-phone game.
+**Team** and **Global** are selectable information views; team scoring and
+online rankings are not implemented. Diamond icons represent score points,
+not an additional currency.
+
+Go back to review the last take, continue to the next round, or use rematch/
+new-group actions after the final round. Score-saving is not repeated when
+navigating between Results and Leaderboard.
