@@ -326,6 +326,13 @@ plan.md                 original build plan and API contract
 
 ---
 
+## Contributors
+
+- Ajit Chaudhary
+- Alok Kumar Thakur
+- Amit Mahato
+- Sachin Pandey
+
 ## A note on how this was built
 
 The backend implementation was written by [Claude Code](https://claude.com/claude-code)
