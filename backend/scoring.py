@@ -56,6 +56,10 @@ MAX_DURATION_SEC = 60.0
 # Frames needed before a metric is worth reporting.
 MIN_VOICED_FRAMES = 8
 
+# An onset earns full credit within this fraction of the phrase length, and
+# nothing beyond twice it.
+ONSET_TOLERANCE = 0.05
+
 # Two onsets closer together than this are the same note; a little pitch
 # wobble on the way into a note would otherwise register twice.
 MIN_ONSET_GAP_SEC = 0.08
@@ -231,40 +235,56 @@ def _contour_score(ref_pairs, att_pairs):
 
 
 def _rhythm_score(ref_onsets, att_onsets):
-    """Compare the gaps between notes, not their absolute times.
+    """How well the notes land, judged on their position within the phrase.
 
-    Using gaps means a late start or device latency costs nothing, while
-    genuinely rushing or dragging still does.
+    Both sequences are normalised to their own span first, so rhythm is scored
+    as proportion rather than absolute seconds: a singer who takes the whole
+    phrase slightly slower is keeping time, not losing it. Each reference onset
+    then earns credit on how near the closest sung onset falls, using the same
+    tolerance taper the pitch metric uses.
     """
     if len(ref_onsets) < 2:
         return None
     if len(att_onsets) < 2:
         return 0.0
-    r = np.diff(ref_onsets)
-    a = np.diff(att_onsets)
-    cost = np.abs(r[:, None] - a[None, :])
-    _, path = librosa.sequence.dtw(C=cost, backtrack=True)
-    mean_err = float(np.mean(cost[path[:, 0], path[:, 1]]))
-    # Half credit at ~280ms of average drift.
-    accuracy = math.exp(-mean_err / 0.4)
-    # Singing far fewer notes than the reference should not look like good time.
-    coverage = min(len(r), len(a)) / max(len(r), len(a))
-    return float(np.clip(100.0 * accuracy * coverage, 0.0, 100.0))
+
+    def unit(seq):
+        span = seq[-1] - seq[0]
+        if span <= 0:
+            return None
+        return (seq - seq[0]) / span
+
+    r = unit(ref_onsets)
+    a = unit(att_onsets)
+    if r is None or a is None:
+        return 0.0
+
+    # Distance from every reference onset to the nearest sung one.
+    nearest = np.min(np.abs(r[:, None] - a[None, :]), axis=1)
+    credit = np.clip(1.0 - nearest / ONSET_TOLERANCE, 0.0, 1.0)
+    placement = float(np.mean(credit))
+
+    # Landing every note in one clump would otherwise score well, so missing or
+    # inventing notes is charged separately.
+    density = min(len(r), len(a)) / max(len(r), len(a))
+    return float(np.clip(100.0 * placement * density, 0.0, 100.0))
 
 
 def _completion_score(ref_voiced_sec, att_voiced_sec):
     """How much of the phrase was actually sung.
 
-    Symmetric, so stopping early and rambling on both cost. Without this an
-    attempt that covers a third of the phrase still aligns near-perfectly
-    against the third it sang.
+    Stopping short is charged in proportion to what was missed. Singing past
+    the end is treated far more leniently, because trailing off or adding a
+    word is a smaller failure than abandoning half the melody.
     """
     if ref_voiced_sec <= 0:
         return None
     ratio = att_voiced_sec / ref_voiced_sec
     if ratio <= 0:
         return 0.0
-    return float(np.clip(100.0 * min(ratio, 1.0 / ratio), 0.0, 100.0))
+    if ratio <= 1.0:
+        return float(100.0 * ratio)
+    return float(100.0 / (1.0 + (ratio - 1.0) * 0.5))
 
 
 # -------------------------------------------------------------------- public
