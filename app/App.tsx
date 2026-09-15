@@ -17,8 +17,10 @@ import {
 } from "@expo-google-fonts/bricolage-grotesque";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { SingScreen } from "./src/screens/SingScreen";
+import { LeaderboardScreen } from "./src/screens/LeaderboardScreen";
 import { ResultsScreen } from "./src/screens/ResultsScreen";
 import { Button, Type, layout } from "./src/components/ui";
+import { rematch } from "./src/lib/party";
 import { advance, saveScore } from "./src/lib/game";
 import type { Game } from "./src/lib/types";
 import { colors as c } from "./src/theme";
@@ -30,13 +32,19 @@ export default function App() {
     BricolageGrotesque_800ExtraBold,
   });
   const [game, setGame] = useState<Game>();
-  const [screen, setScreen] = useState<"home" | "sing" | "results">("home");
+  const [screen, setScreen] = useState<
+    "home" | "sing" | "results" | "leaderboard"
+  >("home");
   const [confirmExit, setConfirmExit] = useState(false);
   useEffect(() => {
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
         if (screen === "home") return false;
+        if (screen === "leaderboard") {
+          setScreen("results");
+          return true;
+        }
         setConfirmExit(true);
         return true;
       },
@@ -74,11 +82,29 @@ export default function App() {
             setScreen("results");
           }}
         />
+      ) : screen === "leaderboard" ? (
+        <LeaderboardScreen
+          game={game}
+          onBack={() => setScreen("results")}
+          onContinue={() => {
+            setGame(advance(game));
+            setScreen("sing");
+          }}
+          onRematch={() => {
+            setGame(rematch(game));
+            setScreen("sing");
+          }}
+          onNewGroup={reset}
+        />
       ) : (
         <ResultsScreen
           game={game}
           onExit={() => setConfirmExit(true)}
           onContinue={() => {
+            if (game.playerIndex === game.players.length - 1) {
+              setScreen("leaderboard");
+              return;
+            }
             const next = advance(game);
             if (next === game) reset();
             else {

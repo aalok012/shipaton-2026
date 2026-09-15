@@ -89,3 +89,49 @@ test("catalogue exhaustion and invalid setup fail clearly", () => {
   );
   assert.equal(shuffled.length, songs.length);
 });
+
+test("party round leaders exclude unplayed friends and preserve ties", async () => {
+  const { roundLeaders, targetToBeat } = await import("../src/lib/party.ts");
+  let game = createGame(players, songs, 2);
+  assert.deepEqual(roundLeaders(game), []);
+  assert.equal(targetToBeat(game), null);
+  game = advance(saveScore(game, score(80)));
+  assert.equal(targetToBeat(game), 80);
+  assert.deepEqual(
+    roundLeaders(game).map((p) => p.id),
+    ["a"],
+  );
+  game = saveScore(game, score(80));
+  assert.deepEqual(
+    roundLeaders(game).map((p) => p.id),
+    ["a", "b"],
+  );
+  game = advance(game);
+  assert.deepEqual(roundLeaders(game), []);
+  assert.equal(targetToBeat(game), null);
+});
+test("rematch keeps the group and catalogue, rotates the opener, and clears scores", async () => {
+  const { rematch } = await import("../src/lib/party.ts");
+  const original = saveScore(createGame(players, songs, 3), score(99));
+  const next = rematch(original);
+  assert.deepEqual(
+    next.players.map((p) => p.id),
+    ["b", "a"],
+  );
+  assert.deepEqual(next.takes, []);
+  assert.equal(next.round, 0);
+  assert.equal(next.playerIndex, 0);
+  assert.equal(new Set(next.songs.map((s) => s.id)).size, 3);
+  assert.equal(original.takes.length, 1);
+  assert.equal(original.players[0].id, "a");
+});
+test("a perfect round target and solo rematch remain valid", async () => {
+  const { rematch, targetToBeat } = await import("../src/lib/party.ts");
+  const game = advance(saveScore(createGame(players, songs, 1), score(100)));
+  assert.equal(targetToBeat(game), 100);
+  const solo = rematch(
+    saveScore(createGame(players.slice(0, 1), songs, 1), score(80)),
+  );
+  assert.deepEqual(solo.players, players.slice(0, 1));
+  assert.deepEqual(solo.takes, []);
+});

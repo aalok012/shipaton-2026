@@ -1,6 +1,7 @@
 export const colors = {
   background: "#F8F5EF",
   paper: "#FFFEFA",
+  glass: "#FFFEFAC7",
   ink: "#292721",
   muted: "#79766D",
   line: "#E5E0D6",

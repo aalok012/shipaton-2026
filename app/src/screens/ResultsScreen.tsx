@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
-  FadeInDown,
-  LinearTransition,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -12,7 +10,9 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
-import { Avatar, Button, Label, layout, Page, Type } from "../components/ui";
+import { Button, Label, layout, Page, Type } from "../components/ui";
+import { Cheers } from "../components/Cheers";
+import { roundLeaders } from "../lib/party";
 import { leaderboard } from "../lib/game";
 import type { Game } from "../lib/types";
 import { colors as c, fonts } from "../theme";
@@ -56,8 +56,7 @@ function ScoreRing({ score }: { score: number }) {
           fill="none"
           strokeLinecap="round"
           strokeDasharray={`${Math.max(0.01, (display / 100) * 572)} 572`}
-          rotation={-90}
-          origin="101, 101"
+          transform="rotate(-90 101 101)"
         />
       </Svg>
       <View style={s.ringLabel} accessibilityLabel={`${score} out of 100`}>
@@ -147,6 +146,7 @@ export function ResultsScreen({
   const roundOver = game.playerIndex === game.players.length - 1;
   const finished = roundOver && game.round === game.songs.length - 1;
   const board = leaderboard(game);
+  const roundWinners = roundLeaders(game);
   const winners = board.filter((p) => p.rank === 1);
   const headline = result.message
     ? "Every voice starts somewhere."
@@ -164,19 +164,19 @@ export function ResultsScreen({
           <Button
             title={
               finished
-                ? "Play again"
+                ? "Reveal the final leaderboard"
                 : roundOver
-                  ? `Let's go, round ${game.round + 2}`
+                  ? "See the round leaderboard"
                   : `Pass the mic to ${game.players[game.playerIndex + 1].name}`
             }
             onPress={onContinue}
-            icon={finished ? "refresh" : "arrow-forward"}
+            icon={roundOver ? "podium-outline" : "arrow-forward"}
           />
           <Type style={s.footerText}>
             {finished
-              ? "Same good people. A brand-new session."
+              ? "The scores are in. Time to crown your crew."
               : roundOver
-                ? "New song. Fresh chance to take the lead."
+                ? "Round complete. See who’s leading the room."
                 : "Same song. A whole new voice."}
           </Type>
         </>
@@ -202,6 +202,37 @@ export function ResultsScreen({
         </Type>
       </View>
       <ScoreRing score={result.score} />
+      {game.players.length > 1 && (
+        <>
+          <View
+            style={[s.winner, { backgroundColor: finished ? c.lime : c.lilac }]}
+          >
+            <Ionicons name="trophy" size={32} color={c.purple} />
+            <View style={{ flex: 1, gap: 5 }}>
+              <Label>
+                {finished
+                  ? "TONIGHT’S CHAMPIONS"
+                  : roundOver
+                    ? "ROUND WINNERS"
+                    : "THE ROUND SO FAR"}
+              </Label>
+              <Type style={s.winnerName}>
+                {(finished ? winners : roundWinners)
+                  .map((p) => p.name)
+                  .join(" & ")}
+              </Type>
+              <Type style={{ fontSize: 12, color: c.muted }}>
+                {finished
+                  ? `${board[0].total} total points · Take a victory bow!`
+                  : roundOver
+                    ? "Round settled. Give them a hand!"
+                    : "Everyone else: the challenge is on."}
+              </Type>
+            </View>
+          </View>
+          <Cheers />
+        </>
+      )}
       {result.message && (
         <View style={s.notice}>
           <Type style={s.noticeText}>
@@ -239,7 +270,7 @@ export function ResultsScreen({
           Scored on your melody and timing. Lyric words aren't checked.
         </Type>
       </View>
-      {finished && (
+      {finished && game.players.length === 1 && (
         <View style={s.winner}>
           <Ionicons name="trophy-outline" size={29} color={c.green} />
           <View style={{ flex: 1, gap: 4 }}>
@@ -258,55 +289,6 @@ export function ResultsScreen({
           </View>
         </View>
       )}
-      <View style={{ gap: 14 }}>
-        <View style={layout.between}>
-          <View style={layout.row}>
-            <Ionicons name="podium-outline" size={19} color={c.ink} />
-            <Type style={s.boardTitle}>
-              {game.players.length === 1 ? "Your session" : "The leaderboard"}
-            </Type>
-          </View>
-          <Type style={s.totalLabel}>TOTAL PTS</Type>
-        </View>
-        {board.map((p) => (
-          <Animated.View
-            key={p.id}
-            entering={
-              reduced ? undefined : FadeInDown.duration(300).delay(p.index * 70)
-            }
-            layout={
-              reduced ? undefined : LinearTransition.springify().damping(18)
-            }
-            style={[s.boardRow, p.rank === 1 && s.firstRow]}
-          >
-            <Type style={[s.rank, p.rank === 1 && { color: c.purple }]}>
-              {String(p.rank).padStart(2, "0")}
-            </Type>
-            <Avatar name={p.name} index={p.index} />
-            <View style={{ flex: 1, gap: 3 }}>
-              <Type style={s.playerName}>
-                {p.name}
-                {p.id === current.id ? "  ♪" : ""}
-              </Type>
-              <Type style={s.roundPoints}>
-                {p.roundScore === undefined
-                  ? "Up next this round"
-                  : `+${p.roundScore} this round`}
-              </Type>
-            </View>
-            <Type style={s.total}>{p.total}</Type>
-          </Animated.View>
-        ))}
-        <Type style={s.boardNote}>
-          {roundOver
-            ? `${game.round + 1} of ${game.songs.length} rounds complete`
-            : "Live standings · Everyone gets a turn before the round ends"}{" "}
-          ·{" "}
-          {game.players.length === 1
-            ? "Keep finding your voice."
-            : "Good vibes count, too."}
-        </Type>
-      </View>
     </Page>
   );
 }
@@ -399,23 +381,5 @@ const s = StyleSheet.create({
     color: c.green,
   },
   winnerName: { fontFamily: fonts.bold, fontSize: 22, color: c.green },
-  boardTitle: { fontFamily: fonts.bold, fontSize: 19, letterSpacing: -0.5 },
-  totalLabel: { fontSize: 9, color: c.muted, letterSpacing: 1 },
-  boardRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    padding: 13,
-    borderWidth: 1,
-    borderColor: c.line,
-    backgroundColor: c.paper,
-    borderRadius: 15,
-  },
-  firstRow: { borderColor: c.purple, backgroundColor: c.lilac },
-  rank: { fontSize: 13, color: c.muted, fontFamily: fonts.bold, minWidth: 20 },
-  playerName: { fontSize: 15, fontFamily: fonts.bold },
-  roundPoints: { fontSize: 10, color: c.muted },
-  total: { fontFamily: fonts.extra, fontSize: 26, letterSpacing: -1 },
-  boardNote: { color: c.muted, fontSize: 10, lineHeight: 16 },
   footerText: { fontSize: 10, color: c.muted, textAlign: "center" },
 });

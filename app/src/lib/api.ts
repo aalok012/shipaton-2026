@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { File } from "expo-file-system";
 import type { Song, Score } from "./types";
 const configuredUrl =
   Platform.OS === "web"
@@ -53,11 +54,14 @@ export async function scoreRecording(uri: string, songId: string) {
       blob.type.includes("mp4") ? "take.m4a" : "take.webm",
     );
   } else {
-    body.append("audio", {
-      uri,
-      name: "take.m4a",
-      type: "audio/mp4",
-    } as unknown as Blob);
+    // SDK 57's fetch serializer reads File.bytes(); it rejects legacy URI parts.
+    const recording = new File(uri);
+    if (!recording.exists || recording.size === 0) {
+      throw new Error(
+        "The saved recording is empty or missing. Please record a fresh take.",
+      );
+    }
+    body.append("audio", recording);
   }
   return request<Score>("/score", { method: "POST", body });
 }

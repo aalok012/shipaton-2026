@@ -108,15 +108,35 @@ export function HomeScreen({ onStart }: { onStart: (game: Game) => void }) {
             <Type style={s.eyebrowText}>LESS SCROLLING, MORE SINGING</Type>
           </View>
           <Type accessibilityRole="header" style={s.headline}>
-            Big tunes.{"\n"}
-            <Type style={s.orangeTitle}>Bigger energy.</Type>
+            Good friends.{"\n"}
+            <Type style={s.orangeTitle}>Bad singing.</Type>
           </Type>
           <Type style={s.tagline}>
-            Your living room. Your stage.{"\n"}Find out who really knows the
-            melody.
+            One phone. A room full of rivals.{"\n"}Who’s taking the crown
+            tonight?
           </Type>
         </View>
         <RecordArt />
+        <View
+          style={{
+            backgroundColor: c.lime,
+            borderRadius: 18,
+            padding: 17,
+            gap: 10,
+          }}
+        >
+          <Label>THE HOUSE RULES</Label>
+          <Type style={{ fontFamily: fonts.bold, fontSize: 17 }}>
+            Pass it. Sing it. Settle it.
+          </Type>
+          <Type style={{ fontSize: 13, lineHeight: 20 }}>
+            Everyone sings the same song. Each take earns up to 100 points.
+            Biggest total takes the crown.
+          </Type>
+          <Type style={{ fontSize: 11, color: c.green }}>
+            2–6 friends · One shared phone · No singing skills required
+          </Type>
+        </View>
         <View style={{ gap: 13 }}>
           <View style={layout.between}>
             <Label>01 / PICK YOUR VIBE</Label>
