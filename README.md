@@ -1,11 +1,10 @@
-# Unison
+# Musically
 
-A party game about singing from memory.
-
-One player is shown an artist and two lines of lyrics, then has to sing them —
-no backing track, no melody to copy, just what they remember. The app listens,
-compares the pitch of what they sang against a reference, and scores it. While
-they sing, everyone else is guessing which song it was.
+A pass-the-phone singing game for iOS and Android. Choose solo or party mode,
+add names, listen to a melody guide, and sing two lyric lines. Each take earns
+0–100 points; a cumulative leaderboard appears after each take and round.
+Everyone sings the same song in a round. The app checks melody and timing,
+not the actual lyric words.
 
 The interesting part is that the scoring is real. It is not a random number
 dressed up with an animation: pitch is extracted from the recording frame by
@@ -20,10 +19,10 @@ frame, aligned against the reference melody, and measured.
 | Scoring engine | Working, 15 tests |
 | HTTP API | Working — 4 endpoints |
 | Song catalogue | 3 demo songs, playable now |
-| Mobile app | In progress |
+| Mobile app | Three screens implemented; physical-device testing pending |
 
 The backend is complete and runs standalone. You can score a recording with
-nothing but `curl`. The React Native client is the remaining work.
+nothing but `curl`. The Expo client lives in `app/`; see the [mobile setup guide](app/README.md).
 
 ---
 
@@ -80,14 +79,48 @@ same analysis path a real recording would.
 
 ---
 
-## Running the app
+## Run backend and frontend together
 
-Not built yet. When it is:
+From the repository root, after installing the backend and app dependencies:
+
+```bash
+npm start
+```
+
+This starts FastAPI, waits for it to become healthy, checks the song catalogue,
+and starts Expo with your laptop's LAN address as `EXPO_PUBLIC_API_URL`.
+Scan the QR code in Expo Go while your phone is on the same Wi-Fi.
+No manual IP editing is needed; the address is detected again each time.
+Ctrl+C stops the services launched by this command. An existing healthy backend
+is reused and left running when you stop Expo.
+
+If you have several network adapters, select the Wi-Fi address explicitly with
+`MUSIC_HOST=<your-lan-ip> npm start`. For browser development, use
+`npm start -- --web` (microphone access requires localhost or HTTPS).
+
+### Run the app separately
+
+Requires Node.js 22.13+ and Expo Go compatible with SDK 57.
 
 ```bash
 cd app
-EXPO_PUBLIC_API_URL=http://<lan-ip>:8000 npx expo start
+npm install
+cp .env.example .env
 ```
+
+Set `EXPO_PUBLIC_API_URL` in `.env` to the LAN address printed by
+`backend/start.sh`, then run `npx expo start` and scan the QR code. Keep the
+backend running and both devices on the same Wi-Fi.
+
+The three screens are **Home → Sing → Results**. Solo and 2–6 player games
+support fresh songs each round, microphone recording, upload retry, score
+animations, and cumulative rankings. The demo catalogue allows up to three
+rounds. More rounds unlock as you add songs.
+
+See [app/README.md](app/README.md) for controls, architecture, checks, and
+physical-device verification. TypeScript checks, four game-logic tests, web/
+iOS/Android bundles, and real-backend browser recording checks pass. Native
+microphone and audio routing still need a real phone test.
 
 ---
 
@@ -154,14 +187,21 @@ startup so the first request does not pay the JIT cost.
 ## Built with
 
 **Backend** — Python 3.12, FastAPI, uvicorn, librosa, numpy, soundfile, ffmpeg
-**App** — Expo, React Native, Reanimated 3, expo-router, expo-audio
-**Tests** — pytest, httpx
+**App** — Expo SDK 57, React Native, TypeScript, Reanimated 4, expo-audio, SVG
+**Tests** — pytest, httpx, Node test runner, browser integration checks
 
 ---
 
 ## Repo layout
 
 ```
+app/
+  App.tsx               three-screen navigation and session state
+  src/screens/          Home, Sing, Results
+  src/components/       shared UI and music graphics
+  src/lib/              API client, game logic, melody preview
+  src/theme.ts          palette and typography
+  README.md             mobile setup and verification
 backend/
   scoring.py            pitch extraction, alignment, the four measures
   main.py               FastAPI service
@@ -177,10 +217,26 @@ plan.md                 API contract and remaining work
 
 ## A note on how this was built
 
-The implementation was written by [Claude Code](https://claude.com/claude-code)
+The backend implementation was written by [Claude Code](https://claude.com/claude-code)
 from a specification and prompt plan I wrote. I set the scoring model, the API
 contract, the screen flow and the build order; Claude Code wrote the code
 against them, and the engine was tuned empirically against recorded takes —
 several of the decisions documented above came out of measuring what actually
 separated a good performance from a bad one, rather than from the original
 design.
+
+The frontend was implemented with OpenAI Codex from the updated three-screen
+brief and the shared API contract.
+
+### Local browser and phone connections
+
+The combined launcher sets `EXPO_PUBLIC_API_URL` to the laptop's LAN address
+for Expo Go and `EXPO_PUBLIC_WEB_API_URL` to localhost for desktop browser
+use. Start both services with `npm start`; press `w` for the browser. These
+addresses are passed at launch, so no LAN address is committed.
+
+If songs load in the browser but not on the phone, check that both devices are
+on the same Wi-Fi and that your operating system permits local-network access
+for the terminal/Node/Python processes. The backend must listen on `0.0.0.0`,
+which the combined launcher configures. A frontend tunnel alone does not
+expose the scoring API.

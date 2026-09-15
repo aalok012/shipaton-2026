@@ -1,3 +1,13 @@
 .DS_Store
 .env
 .env.*
+
+# Mobile app and local Python artifacts
+node_modules/
+.expo/
+dist/
+.venv/
+__pycache__/
+*.pyc
+!**/.env.example
+dist-native/
