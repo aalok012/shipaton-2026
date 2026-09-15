@@ -7,7 +7,7 @@ same build_reference path real audio would take - so the API, the scoring and
 the app all behave exactly as they will with real songs. Replace this with
 prep_songs.py once you have actual recordings.
 
-Titles and lyrics here are invented, not real songs.
+The reference audio is synthesized locally; no original recordings are used.
 """
 
 import json
@@ -21,44 +21,24 @@ from scoring import SR, build_reference, build_reference_onsets
 REF_DIR = "references"
 OUT = "songs.json"
 
-# (midi note, beats) - each phrase is a different shape so the demo does not
-# look like the same song three times.
+# (MIDI note, beats); None represents an explicit rest.
 SONGS = [
     {
-        "id": "paper-lanterns",
-        "title": "Paper Lanterns",
-        "artist": "The Quiet Hours",
-        "lyrics": ["We hung the lanterns out on Rowan Street",
-                   "and waited for the summer to catch up"],
-        "decoys": ["Glass Harbour", "Æther & Ash", "Long Way From Tuesday"],
-        "melody": [(67, .5), (67, .5), (69, .5), (67, .5), (72, .5), (71, 1.0),
-                   (67, .5), (67, .5), (69, .5), (67, .5), (74, .5), (72, 1.0)],
-    },
-    {
-        "id": "slow-weather",
-        "title": "Slow Weather",
-        "artist": "Marguerite Vale",
-        "lyrics": ["There's a slow weather moving through the kitchen",
-                   "and I can't tell if it's leaving or arriving"],
-        "decoys": ["Cold Front", "Handwriting", "The Undertow Waltz"],
-        "melody": [(64, .75), (67, .25), (69, .5), (71, .5), (69, .5), (67, 1.0),
-                   (64, .75), (67, .25), (71, .5), (72, .5), (71, .5), (69, 1.0)],
-    },
-    {
-        "id": "corner-store-gospel",
-        "title": "Corner Store Gospel",
-        "artist": "Eli Brooks Trio",
-        "lyrics": ["Sing me something cheap and holy",
-                   "under the fluorescent light"],
-        "decoys": ["Sunday Change", "Neon Choir", "Two Dollar Hymn"],
-        "melody": [(72, .5), (71, .5), (69, .5), (67, .5), (69, .5), (71, .5),
-                   (72, 1.0), (69, .5), (67, .5), (65, .5), (67, 1.5)],
+        "id": "baby-justin-bieber",
+        "title": "Baby",
+        "artist": "Justin Bieber",
+        "lyrics": ["Baby, baby, baby, oh",
+                   "Like baby, baby, baby, no"],
+        "decoys": ["One Time", "Boyfriend", "Sorry"],
+        # First two phrases of the supplied justin_bieber_baby_chorus.mid:
+        # ticks 0–444, 96 ticks/beat, tempo 461602 microseconds/beat.
+        "seconds_per_beat": 0.461602,
+        "melody": [(67, .25), (65, .25), (67, .25), (65, .25),
+                   (67, .25), (65, .25), (70, .5), (None, .5),
+                   (67, .125), (67, .25), (65, .25), (67, .25),
+                   (65, .25), (67, .25), (65, .25), (72, .5)],
     },
 ]
-
-BPM = 96
-BEAT = 60.0 / BPM
-
 
 def _note(midi, dur):
     n = int(SR * dur)
@@ -72,12 +52,19 @@ def _note(midi, dur):
     return (wave * env * 0.5).astype(np.float32)
 
 
-def _render(melody):
-    parts = [np.zeros(int(SR * 0.15), dtype=np.float32)]
+def _render(melody, seconds_per_beat):
+    # Round cumulative boundaries to avoid accumulating per-note timing error.
+    total_beats = sum(beats for _, beats in melody)
+    audio = np.zeros(round(SR * total_beats * seconds_per_beat), dtype=np.float32)
+    elapsed_beats = 0.0
     for midi, beats in melody:
-        parts.append(_note(midi, beats * BEAT))
-        parts.append(np.zeros(int(SR * 0.08), dtype=np.float32))
-    return np.concatenate(parts)
+        start = round(SR * elapsed_beats * seconds_per_beat)
+        elapsed_beats += beats
+        end = round(SR * elapsed_beats * seconds_per_beat)
+        if midi is not None:
+            tone = _note(midi, (end - start + 0.01) / SR)
+            audio[start:end] = tone[:end - start]
+    return audio
 
 
 def main():
@@ -85,7 +72,7 @@ def main():
     songs = []
     for spec in SONGS:
         path = os.path.join(REF_DIR, f"{spec['id']}.wav")
-        audio = _render(spec["melody"])
+        audio = _render(spec["melody"], spec["seconds_per_beat"])
         sf.write(path, audio, SR)
 
         midi = build_reference(path)

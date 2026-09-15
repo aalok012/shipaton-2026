@@ -4,7 +4,6 @@ import {
   AppState,
   Linking,
   Platform,
-  Pressable,
   StyleSheet,
   View,
 } from "react-native";
@@ -12,8 +11,7 @@ import {
   AudioModule,
   RecordingPresets,
   setAudioModeAsync,
-  useAudioPlayer,
-  useAudioPlayerStatus,
+  setIsAudioActiveAsync,
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
@@ -22,16 +20,13 @@ import {
   Avatar,
   Button,
   ErrorCard,
-  Label,
   layout,
   Page,
   Type,
 } from "../components/ui";
 import { PartyHandoff } from "../components/PartyHandoff";
-import { PitchRibbon } from "../components/PitchRibbon";
-import { getSong, scoreRecording, errorMessage } from "../lib/api";
-import { melodyUri } from "../lib/melody";
-import type { Game, Score, Song } from "../lib/types";
+import { scoreRecording, errorMessage } from "../lib/api";
+import type { Game, Score } from "../lib/types";
 import { colors as c, fonts } from "../theme";
 type Phase =
   | "ready"
@@ -52,19 +47,16 @@ export function SingScreen({
   const [ready, setReady] = useState(game.players.length === 1);
   const summary = game.songs[game.round];
   const current = game.players[game.playerIndex];
-  const [song, setSong] = useState<Song>();
   const [phase, setPhase] = useState<Phase>("ready");
   const [countdown, setCountdown] = useState(3);
   const [error, setError] = useState("");
   const [denied, setDenied] = useState(false);
-  const [previewBusy, setPreviewBusy] = useState(false);
   const [savedUri, setSavedUri] = useState<string>();
   const alive = useRef(true);
   const operation = useRef(0);
   const locked = useRef(false);
   const phaseRef = useRef<Phase>("ready");
   phaseRef.current = phase;
-  const previewUri = useRef<string | undefined>(undefined);
   const recorder = useAudioRecorder(
     { ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true },
     (status) => {
@@ -79,26 +71,12 @@ export function SingScreen({
     },
   );
   const state = useAudioRecorderState(recorder, 100);
-  const player = useAudioPlayer(null);
-  const playerStatus = useAudioPlayerStatus(player);
   const seconds = state.durationMillis / 1000;
-  const loadSong = async () => {
-    setError("");
-    try {
-      const full = await getSong(summary.id);
-      if (alive.current) setSong(full);
-    } catch (e) {
-      if (alive.current) setError(errorMessage(e));
-    }
-  };
   useEffect(() => {
     alive.current = true;
-    void loadSong();
     return () => {
       alive.current = false;
       operation.current++;
-      if (Platform.OS === "web" && previewUri.current)
-        URL.revokeObjectURL(previewUri.current);
     };
   }, []);
   useEffect(() => {
@@ -126,10 +104,9 @@ export function SingScreen({
           locked.current = false;
         }
       }
-      player.pause();
     });
     return () => subscription.remove();
-  }, [recorder, player]);
+  }, [recorder]);
   useEffect(() => {
     if (phase !== "countdown") return;
     const timer = setTimeout(() => {
@@ -189,31 +166,6 @@ export function SingScreen({
     },
     [],
   );
-  async function preview() {
-    if (!song || locked.current) return;
-    if (playerStatus.playing) {
-      player.pause();
-      return;
-    }
-    locked.current = true;
-    setPreviewBusy(true);
-    setError("");
-    try {
-      await setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-      });
-      if (!previewUri.current) previewUri.current = await melodyUri(song);
-      if (!alive.current) return;
-      player.replace(previewUri.current);
-      player.play();
-    } catch (e) {
-      if (alive.current) setError(errorMessage(e));
-    } finally {
-      locked.current = false;
-      if (alive.current) setPreviewBusy(false);
-    }
-  }
   async function begin() {
     if (locked.current) return;
     locked.current = true;
@@ -223,7 +175,6 @@ export function SingScreen({
     setSavedUri(undefined);
     setPhase("preparing");
     try {
-      player.pause();
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (__DEV__) console.info("[microphone] permission", permission.status);
       if (!alive.current || token !== operation.current) return;
@@ -238,7 +189,28 @@ export function SingScreen({
         playsInSilentMode: true,
       });
       if (!alive.current || token !== operation.current) return;
-      await recorder.prepareToRecordAsync();
+      try {
+        await recorder.prepareToRecordAsync();
+      } catch (initialError) {
+        if (Platform.OS !== "ios") throw initialError;
+
+        // AVAudioSession can still be releasing the previous singer's
+        // recorder. Reset it once and give the input route time to settle.
+        await setIsAudioActiveAsync(false);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        if (!alive.current || token !== operation.current) return;
+        await setIsAudioActiveAsync(true);
+        await setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
+        });
+        if (!alive.current || token !== operation.current) return;
+        // Supplying options also replaces the failed native recorder.
+        await recorder.prepareToRecordAsync({
+          ...RecordingPresets.HIGH_QUALITY,
+          isMeteringEnabled: true,
+        });
+      }
       if (__DEV__)
         console.info("[microphone] prepared", recorder.getStatus().canRecord);
       if (!alive.current || token !== operation.current) {
@@ -269,7 +241,15 @@ export function SingScreen({
       if (alive.current) onScored(result);
     } catch (e) {
       if (alive.current) {
-        setError(errorMessage(e));
+        const message = errorMessage(e);
+        if (message.startsWith("recording too short")) {
+          setSavedUri(undefined);
+          setError(
+            "The microphone saved less than a second of audio. Record a fresh take and sing both lines before finishing.",
+          );
+        } else {
+          setError(message);
+        }
         setPhase("ready");
       }
     } finally {
@@ -278,6 +258,8 @@ export function SingScreen({
   }
   async function finish() {
     if (locked.current) return;
+    // Use the recorder's current value, not a potentially stale UI poll.
+    if (recorder.getStatus().durationMillis < 1100) return;
     locked.current = true;
     phaseRef.current = "stopping";
     setPhase("stopping");
@@ -324,9 +306,7 @@ export function SingScreen({
             <ErrorCard
               message={error}
               onRetry={
-                !song
-                  ? loadSong
-                  : savedUri && phase === "ready"
+                savedUri && phase === "ready"
                     ? () => {
                         if (!locked.current) {
                           locked.current = true;
@@ -362,8 +342,6 @@ export function SingScreen({
             onPress={phase === "recording" ? finish : begin}
             busy={busy}
             disabled={
-              !song ||
-              previewBusy ||
               phase === "countdown" ||
               (phase === "recording" && seconds < 1.1)
             }
@@ -405,7 +383,7 @@ export function SingScreen({
         <Type style={layout.subtitle}>
           {game.players.length > 1
             ? `Singer ${game.playerIndex + 1} of ${game.players.length}. Pass the phone, keep the energy.`
-            : "Take a breath. Find the melody. Make it yours."}
+            : "Take a breath. Sing the lyrics. Make it yours."}
         </Type>
       </View>
       <View style={s.songCard}>
@@ -428,49 +406,7 @@ export function SingScreen({
             </Type>
           ))}
         </View>
-        <View style={s.previewRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              playerStatus.playing
-                ? "Stop melody preview"
-                : "Listen to melody preview"
-            }
-            onPress={preview}
-            disabled={!song || phase !== "ready" || previewBusy}
-            style={[
-              s.previewButton,
-              (phase !== "ready" || !song) && { opacity: 0.4 },
-            ]}
-          >
-            {previewBusy ? (
-              <ActivityIndicator size="small" color={c.purple} />
-            ) : (
-              <Ionicons
-                name={playerStatus.playing ? "pause" : "play"}
-                size={15}
-                color={c.purple}
-              />
-            )}
-            <Type style={s.previewText}>
-              {playerStatus.playing ? "Stop preview" : "Hear the melody"}
-            </Type>
-          </Pressable>
-          <Type style={s.trackNumber}>
-            ~{Math.ceil(summary.duration_sec)} SEC
-          </Type>
-        </View>
-        <Type style={s.guideNote}>
-          Instrumental guide · Sing the two lines to this melody.
-        </Type>
       </View>
-      <PitchRibbon
-        frames={song?.reference_midi}
-        duration={summary.duration_sec}
-        elapsed={phase === "recording" ? seconds : playerStatus.currentTime}
-        metering={state.metering}
-        recording={phase === "recording"}
-      />
       <View style={s.recordStatus}>
         <View style={s.micCircle}>
           {busy ? (
@@ -549,22 +485,6 @@ const s = StyleSheet.create({
     opacity: 0.4,
   },
   lyric: { fontSize: 21, lineHeight: 28, fontFamily: fonts.medium },
-  previewRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  previewButton: {
-    backgroundColor: c.paper,
-    paddingHorizontal: 14,
-    minHeight: 44,
-    borderRadius: 25,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  previewText: { color: c.purple, fontSize: 12, fontFamily: fonts.bold },
-  guideNote: { fontSize: 10, color: c.purple, marginTop: -10 },
   recordStatus: {
     flexDirection: "row",
     justifyContent: "center",
