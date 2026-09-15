@@ -17,7 +17,7 @@ against the selected song's reference melody, and measures the difference.
 |---|---|
 | Scoring engine | Live API pitch comparison verified; 15 backend tests pass |
 | HTTP API | Working — 4 endpoints |
-| Song catalogue | 3 demo songs, playable now |
+| Song catalogue | 1 demo song, playable now |
 | Mobile app | Four screens implemented; iPhone song loading confirmed; phone recording upload still unverified |
 
 The backend is complete and runs standalone. You can score a recording with
@@ -43,7 +43,7 @@ from a phone.
 Score a recording without the app:
 
 ```bash
-curl -F "audio=@take.m4a" -F "song_id=paper-lanterns" \
+curl -F "audio=@take.m4a" -F "song_id=baby" \
      http://localhost:8000/score
 ```
 
@@ -59,10 +59,11 @@ curl -F "audio=@take.m4a" -F "song_id=paper-lanterns" \
 
 ### Songs
 
-The repo ships with three playable songs, so it runs immediately after
-install. Their reference melodies are synthesised rather than recorded — the
-titles and lyrics are invented, not real songs. They go through exactly the
-same analysis path a real recording would.
+The repo ships with one playable song so it runs immediately after install.
+Its reference melody is **synthesised, not the record** — a simplified
+approximation of the chorus hook. A singer is scored against that simplified
+line, so this is a demo fixture rather than a licensed backing track. It goes
+through exactly the same analysis path a real recording would.
 
 ```bash
 .venv/bin/python seed_demo_songs.py   # rebuild the demo catalogue
@@ -183,20 +184,20 @@ recording.
   scoring request completed. `GET /songs` only confirms catalogue access.
 - If no upload arrives, check the app's error message, microphone permission,
   and network connection. On your phone, open `http://<your-lan-ip>:8000/health`
-  using the address printed by the launcher. Expect `{"ok":true,"songs":3}`
+  using the address printed by the launcher. Expect `{"ok":true,"songs":1}`
   with the seeded catalogue.
 
 ## Verified checks
 
 The live API audit on **September 14, 2026** used controlled synthetic recordings
-against **Paper Lanterns** from the demo catalogue:
+against **Baby** from the demo catalogue:
 
 | Recording | Score / 100 | Pitch accuracy |
 |---|---:|---:|
-| Matching melody | **98** | 99.7% |
-| Off-key melody | **61** | 42.8% |
+| Matching melody | **97** | 99.9% |
+| Off-key melody | **66** | 52.4% |
 | Silence | **0** | Not measurable |
-| Incomplete phrase (about 40%) | **62** | 73.1% |
+| Incomplete phrase (about 40%) | **48** | 54.3% |
 | Matching melody one octave higher | **97** | 100.0% |
 | Matching melody encoded as `.m4a` | **98** | 99.7% |
 
@@ -276,7 +277,7 @@ its weight shared among the others, rather than being scored as zero.
 
 | | |
 |---|---|
-| `GET /health` | `{"ok": true, "songs": 3}` |
+| `GET /health` | `{"ok": true, "songs": 1}` |
 | `GET /songs` | Catalogue, without the heavy melody arrays |
 | `GET /songs/{id}` | One song, including `reference_midi` for the pitch display |
 | `POST /score` | multipart `audio` + `song_id` → the score object above |

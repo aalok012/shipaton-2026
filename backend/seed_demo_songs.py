@@ -7,7 +7,8 @@ same build_reference path real audio would take - so the API, the scoring and
 the app all behave exactly as they will with real songs. Replace this with
 prep_songs.py once you have actual recordings.
 
-Titles and lyrics here are invented, not real songs.
+The melody is a synthesised approximation of the hook, not the record, so a
+singer is scored against this simplified line rather than the original vocal.
 """
 
 import json
@@ -21,38 +22,21 @@ from scoring import SR, build_reference, build_reference_onsets
 REF_DIR = "references"
 OUT = "songs.json"
 
-# (midi note, beats) - each phrase is a different shape so the demo does not
-# look like the same song three times.
+# (midi note, beats) - the reference melody the singer is scored against.
 SONGS = [
     {
-        "id": "paper-lanterns",
-        "title": "Paper Lanterns",
-        "artist": "The Quiet Hours",
-        "lyrics": ["We hung the lanterns out on Rowan Street",
-                   "and waited for the summer to catch up"],
-        "decoys": ["Glass Harbour", "Æther & Ash", "Long Way From Tuesday"],
-        "melody": [(67, .5), (67, .5), (69, .5), (67, .5), (72, .5), (71, 1.0),
-                   (67, .5), (67, .5), (69, .5), (67, .5), (74, .5), (72, 1.0)],
-    },
-    {
-        "id": "slow-weather",
-        "title": "Slow Weather",
-        "artist": "Marguerite Vale",
-        "lyrics": ["There's a slow weather moving through the kitchen",
-                   "and I can't tell if it's leaving or arriving"],
-        "decoys": ["Cold Front", "Handwriting", "The Undertow Waltz"],
-        "melody": [(64, .75), (67, .25), (69, .5), (71, .5), (69, .5), (67, 1.0),
-                   (64, .75), (67, .25), (71, .5), (72, .5), (71, .5), (69, 1.0)],
-    },
-    {
-        "id": "corner-store-gospel",
-        "title": "Corner Store Gospel",
-        "artist": "Eli Brooks Trio",
-        "lyrics": ["Sing me something cheap and holy",
-                   "under the fluorescent light"],
-        "decoys": ["Sunday Change", "Neon Choir", "Two Dollar Hymn"],
-        "melody": [(72, .5), (71, .5), (69, .5), (67, .5), (69, .5), (71, .5),
-                   (72, 1.0), (69, .5), (67, .5), (65, .5), (67, 1.5)],
+        "id": "baby",
+        "title": "Baby",
+        "artist": "Justin Bieber",
+        "lyrics": ["Baby, baby, baby, ooh",
+                   "Like baby, baby, baby, no"],
+        "decoys": ["Sorry", "One Time", "Somebody To Love"],
+        # An approximation of the chorus hook, not a transcription: three
+        # repeated two-note figures resolving down on the held "ooh".
+        "melody": [(72, .5), (72, .5), (69, 1.0),
+                   (72, .5), (72, .5), (69, 1.0),
+                   (72, .5), (72, .5), (69, .5), (67, 1.5),
+                   (72, .5), (72, .5), (69, 1.0), (67, 2.0)],
     },
 ]
 

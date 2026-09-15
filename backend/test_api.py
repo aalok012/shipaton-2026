@@ -21,13 +21,15 @@ from fastapi.testclient import TestClient
 import main
 
 SR = 22050
-SONG_ID = "paper-lanterns"
+SONG_ID = "baby"
 
 # The demo song's phrase, in seconds, matching seed_demo_songs.py.
 _BEAT = 60.0 / 96
 MEL = [(m, b * _BEAT) for m, b in
-       [(67, .5), (67, .5), (69, .5), (67, .5), (72, .5), (71, 1.0),
-        (67, .5), (67, .5), (69, .5), (67, .5), (74, .5), (72, 1.0)]]
+       [(72, .5), (72, .5), (69, 1.0),
+        (72, .5), (72, .5), (69, 1.0),
+        (72, .5), (72, .5), (69, .5), (67, 1.5),
+        (72, .5), (72, .5), (69, 1.0), (67, 2.0)]]
 
 
 def _tone(midi, dur):
@@ -106,6 +108,7 @@ def test_songs_list_omits_reference_midi(client):
     assert r.status_code == 200
     for song in r.json():
         assert "reference_midi" not in song, "heavy array must not ship in the list"
+        assert "reference_onsets" not in song, "onsets must not ship in the list"
         assert {"id", "title", "artist", "lyrics", "decoys"} <= set(song)
         assert len(song["lyrics"]) == 2
         assert len(song["decoys"]) == 3

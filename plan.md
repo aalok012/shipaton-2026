@@ -17,7 +17,7 @@ Two people build in parallel from a shared API contract:
 | Scoring engine | Done, verified — good take 98 vs bad take 58 |
 | `/health` `/songs` `/songs/{id}` `/score` | Done, all edge cases return clean JSON |
 | m4a upload path | Done, verified end to end |
-| Demo song data | 3 seeded songs, playable now (`seed_demo_songs.py`) |
+| Demo song data | 1 seeded song ("Baby"), playable now (`seed_demo_songs.py`) |
 | Expo app | Not started |
 | README | Not written (joint task, last 20 min) |
 | Git | Repo initialized, one local commit, **not pushed** |
@@ -27,10 +27,14 @@ Two people build in parallel from a shared API contract:
 1. **`unison-build-spec.md` is missing.** Person B needs it for the 8 screen
    names (section 3) and the exact palette hexes and motion moments
    (section 4). Nothing in this plan invents those values.
-2. **Songs are demo data, by choice.** `seed_demo_songs.py` synthesises three
-   songs with invented titles and lyrics, run through the same analysis path
-   real audio takes. Swap in real recordings later with `prep_songs.py`;
-   nothing else has to change.
+2. **Songs are demo data, by choice.** `seed_demo_songs.py` synthesises one
+   song, "Baby", from a simplified approximation of the chorus hook - not the
+   record. It runs through the same analysis path real audio takes. Swap in
+   real recordings later with `prep_songs.py`; nothing else has to change.
+
+   With a single song, a round can only be played once before it repeats. The
+   app's "no repeats" rule needs to tolerate running out of songs, or the demo
+   should be kept to one round per player.
 3. **`scoring.py` was written from the prompt doc**, not supplied. If the
    original exists, dropping it in replaces that one file; the interface
    (`build_reference`, `score_recording`) is unchanged.
@@ -53,12 +57,12 @@ Base URL comes from `EXPO_PUBLIC_API_URL`. Phone and laptop must share a network
 Every song **without** the heavy `reference_midi` array. Use for song selection.
 ```json
 [{
-  "id": "test-song",
-  "title": "Test Song",
-  "artist": "Synthetic",
-  "lyrics": ["first line shown in round intro", "second line"],
-  "duration_sec": 7.81,
-  "decoys": ["Paper Lanterns", "Slow Weather", "Corner Store Gospel"]
+  "id": "baby",
+  "title": "Baby",
+  "artist": "Justin Bieber",
+  "lyrics": ["Baby, baby, baby, ooh", "Like baby, baby, baby, no"],
+  "duration_sec": 8.14,
+  "decoys": ["Sorry", "One Time", "Somebody To Love"]
 }]
 ```
 The guess round shows `title` plus the three `decoys`, shuffled.
@@ -160,8 +164,8 @@ Three deliberate decisions:
 - **A metric that cannot be measured is dropped**, not scored zero, and its
   weight is shared among the rest.
 
-Measured on synthetic takes: good **97**, off-key **62** (gap 35), a take that
-stops 40% in **61**, silence **0**.
+Measured on synthetic takes: good **97**, off-key **66** (gap 31), a take that
+stops 40% in **48**, silence **0**.
 
 ### Measured performance
 Scoring runs in **0.15–0.18s**, far inside the 30s timeout. The first `pyin`
